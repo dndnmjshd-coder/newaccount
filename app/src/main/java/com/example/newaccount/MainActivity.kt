@@ -1,5 +1,7 @@
 package com.example.newaccount
 
+import android.animation.ObjectAnimator
+import android.animation.ValueAnimator
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.Typeface
@@ -9,7 +11,10 @@ import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
+import android.view.animation.AccelerateDecelerateInterpolator
 import android.widget.Button
+import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
@@ -62,49 +67,51 @@ class MainActivity : AppCompatActivity() {
     private fun fancyButton(label: String, secondary: Boolean = false): Button = Button(this).apply {
         text = label
         setAllCaps(false)
-        setTextColor(Color.parseColor(if (secondary) "#CFC3F0" else "#FFE9A8"))
+        setTextColor(Color.parseColor(if (secondary) "#E9BDBD" else "#FFE5E5"))
         textSize = 16f
         typeface = Typeface.DEFAULT_BOLD
         val colors = if (secondary) {
-            intArrayOf(Color.parseColor("#2A2347"), Color.parseColor("#1A1533"))
+            intArrayOf(Color.parseColor("#2B0A0A"), Color.parseColor("#140404"))
         } else {
-            intArrayOf(Color.parseColor("#7B3FE4"), Color.parseColor("#4A1FA8"))
+            intArrayOf(Color.parseColor("#D00000"), Color.parseColor("#6A040F"))
         }
         background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, colors).apply {
             cornerRadius = dp(28).toFloat()
-            setStroke(dp(2), Color.parseColor(if (secondary) "#6B5A9E" else "#F2C14E"))
+            setStroke(dp(2), Color.parseColor(if (secondary) "#7A2B2B" else "#FF4D4D"))
         }
         elevation = dp(6).toFloat()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window.statusBarColor = Color.parseColor("#1E0F45")
-        window.navigationBarColor = Color.parseColor("#05030D")
+        window.statusBarColor = Color.BLACK
+        window.navigationBarColor = Color.BLACK
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
         val title = TextView(this).apply {
             text = "EX25"
-            textSize = 46f
+            textSize = 34f
             typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.parseColor("#FFE08A"))
+            setTextColor(Color.parseColor("#FF3B3B"))
+            setShadowLayer(14f, 0f, 2f, Color.BLACK)
             letterSpacing = 0.25f
             gravity = Gravity.CENTER
         }
         val subtitle = TextView(this).apply {
             text = "ACCOUNT TOOL"
             textSize = 12f
-            setTextColor(Color.parseColor("#9C8BC9"))
+            setTextColor(Color.parseColor("#D9A5A5"))
             letterSpacing = 0.4f
             gravity = Gravity.CENTER
         }
         val line = View(this).apply {
-            setBackgroundColor(Color.parseColor("#C8901F"))
+            setBackgroundColor(Color.parseColor("#FF2A2A"))
         }
         log = TextView(this).apply {
             text = "اختر الطريقة"
             textSize = 15f
-            setTextColor(Color.parseColor("#E6DDFB"))
+            setTextColor(Color.parseColor("#FFE0E0"))
+            setShadowLayer(10f, 0f, 2f, Color.BLACK)
             gravity = Gravity.CENTER
         }
 
@@ -161,27 +168,56 @@ class MainActivity : AppCompatActivity() {
             addView(btnStepsBack, btnParams())
         }
 
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(dp(28), dp(72), dp(28), dp(28))
+        val bg = ImageView(this).apply {
+            setImageResource(R.drawable.shanks_bg)
+            scaleType = ImageView.ScaleType.CENTER_CROP
+        }
+        val shade = View(this).apply {
             background = GradientDrawable(
                 GradientDrawable.Orientation.TOP_BOTTOM,
-                intArrayOf(Color.parseColor("#1E0F45"), Color.parseColor("#05030D"))
+                intArrayOf(
+                    Color.parseColor("#80000000"),
+                    Color.parseColor("#00000000"),
+                    Color.parseColor("#F2000000")
+                )
             )
+        }
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(dp(28), dp(44), dp(28), dp(28))
             addView(title, fullWidth())
             addView(subtitle, fullWidth())
             addView(line, LinearLayout.LayoutParams(dp(70), dp(2)).apply {
-                topMargin = dp(18)
-                bottomMargin = dp(18)
+                topMargin = dp(14)
                 gravity = Gravity.CENTER_HORIZONTAL
             })
-            addView(log, fullWidth().apply { bottomMargin = dp(22) })
+            addView(
+                View(this@MainActivity),
+                LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f)
+            )
+            addView(log, fullWidth().apply { bottomMargin = dp(10) })
             addView(modeGroup, fullWidth())
             addView(menuGroup, fullWidth())
             addView(stepsGroup, fullWidth())
         }
-        setContentView(root)
+        val frame = FrameLayout(this).apply {
+            setBackgroundColor(Color.BLACK)
+            addView(bg, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+            addView(shade, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+            addView(content, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        }
+        setContentView(frame)
+
+        for (prop in listOf(View.SCALE_X, View.SCALE_Y)) {
+            ObjectAnimator.ofFloat(bg, prop, 1f, 1.12f).apply {
+                duration = 10000L
+                repeatCount = ValueAnimator.INFINITE
+                repeatMode = ValueAnimator.REVERSE
+                interpolator = AccelerateDecelerateInterpolator()
+                start()
+            }
+        }
         show(modeGroup)
 
         Shizuku.addRequestPermissionResultListener { _, r ->
