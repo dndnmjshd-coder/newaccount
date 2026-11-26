@@ -533,5 +533,114 @@ class MainActivity : AppCompatActivity() {
                 if (out.contains("STEP_OK")) {
                     val extra = out.substringAfter("STEP_OK").trim()
                     log.text = if (extra.isEmpty()) done else "$done\n$extra"
+                } else {                    log.text = "فشلت العملية:\n${out.ifBlank { "بدون تفاصيل" }}"
+                }
+            }
+        }
+    }
+
+    private fun refreshSteps() {
+        btn1.visibility = View.VISIBLE
+        enable(btn1, true)
+        btn2.visibility = View.GONE
+        btn3.visibility = View.GONE
+        log.text = "اضغط الزر 1"
+        thread {
+            val out = exec("[ -e \"$D/${PKG}_hold\" ] && echo HOLD")
+            runOnUiThread {
+                if (out.contains("HOLD")) {
+                    btn1.visibility = View.GONE
+                    btn2.visibility = View.VISIBLE
+                    enable(btn2, true)
+                    btn3.visibility = View.VISIBLE
+                    enable(btn3, true)
+                    log.text = "مجلد اللعبة معاد تسميته من قبل. كمّل من الزر 2، أو اضغط 3 لإرجاعه."
+                }
+            }
+        }
+    }
+
+    private fun runStep(cmd: String, busy: String, button: Button, next: Button?, done: String) {
+        enable(button, false)
+        enable(btnStepsBack, false)
+        log.text = busy
+        thread {
+            val out = exec(cmd)
+            runOnUiThread {
+                enable(btnStepsBack, true)
+                if (out.contains("STEP_OK")) {
+                    button.visibility = View.GONE
+                    if (next != null) { next.visibility = View.VISIBLE; enable(next, true) }
+                    else goMenu()
+                    log.text = done
                 } else {
+                    enable(button, true)
+                    log.text = "فشلت الخطوة:\n${out.ifBlank { "بدون تفاصيل" }}"
+                }
+            }
+        }
+    }
+
+    private fun step1() = """
+        [ -d "$D/$PKG" ] || { echo "مجلد اللعبة غير موجود"; exit 1; }
+        [ ! -e "$D/${PKG}_hold" ] || { echo "المجلد _hold موجود من قبل"; exit 1; }
+        am force-stop $PKG
+        mv "$D/$PKG" "$D/${PKG}_hold" || exit 1
+        echo STEP_OK
+    """.trimIndent()
+
+    private fun step2() = """
+        pm clear $PKG || { echo "فشل مسح البيانات"; exit 1; }
+        echo STEP_OK
+    """.trimIndent()
+
+    private fun step3() = """
+        [ -e "$D/${PKG}_hold" ] || { echo "ما في مجلد _hold"; exit 1; }
+        rm -rf "$D/$PKG"
+        mv "$D/${PKG}_hold" "$D/$PKG" || exit 1
+        echo STEP_OK
+    """.trimIndent()
+
+    private fun backupCmd() = """
+        [ -d "$D/$PKG" ] || { echo "مجلد اللعبة غير موجود"; exit 1; }
+        rm -rf "$BACKUP.tmp"
+        mkdir -p "$BACKUP.tmp" || exit 1
+        cp -a "$D/$PKG/." "$BACKUP.tmp/" || { echo "فشل النسخ (ممكن المساحة ما تكفي)"; exit 1; }
+        rm -rf "$BACKUP"
+        mv "$BACKUP.tmp" "$BACKUP" || exit 1
+        echo STEP_OK
+        du -sh "$BACKUP" | cut -f1
+    """.trimIndent()
+
+    private fun restoreCmd() = """
+        [ -d "$BACKUP" ] || { echo "ما في نسخة احتياطية"; exit 1; }
+        rm -rf "$D/${PKG}_restore"
+        cp -a "$BACKUP" "$D/${PKG}_restore" || { echo "فشل النسخ (ممكن المساحة ما تكفي)"; rm -rf "$D/${PKG}_restore"; exit 1; }
+        am force-stop $PKG
+        rm -rf "$D/$PKG"
+        mv "$D/${PKG}_restore" "$D/$PKG" || exit 1
+        echo STEP_OK
+    """.trimIndent()
+
+    private fun exec(cmd: String): String = if (useRoot) execRoot(cmd) else execShizuku(cmd)
+
+    private fun execShizuku(cmd: String): String = try {
+        val m = Shizuku::class.java.getDeclaredMethod(
+            "newProcess",
+            Array<String>::class.java, Array<String>::class.java, String::class.java
+        ).apply { isAccessible = true }
+        read(m.invoke(null, arrayOf("sh", "-c", cmd), null, null) as Process)
+    } catch (t: Throwable) { "خطأ: ${t.message}" }
+
+    private fun execRoot(cmd: String): String = try {
+        read(Runtime.getRuntime().exec(arrayOf("su", "-c", cmd)))
+    } catch (t: Throwable) { "ما لقيت root: ${t.message}" }
+
+    private fun read(p: Process): String {
+        val o = p.inputStream.bufferedReader().readText()
+        val e = p.errorStream.bufferedReader().readText()
+        p.waitFor()
+        return o + e
+    }
+}
   
