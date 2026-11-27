@@ -2,20 +2,15 @@ package com.example.newaccount
 
 import android.animation.ObjectAnimator
 import android.animation.ValueAnimator
-import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.graphics.Canvas
 import android.graphics.Color
-import android.graphics.Paint
-import android.graphics.RadialGradient
-import android.graphics.Shader
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Bundle
-import android.os.SystemClock
 import android.view.Gravity
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
@@ -29,211 +24,15 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import rikka.shizuku.Shizuku
 import kotlin.concurrent.thread
-import kotlin.math.PI
-import kotlin.math.cos
-import kotlin.math.max
-import kotlin.math.sin
-import kotlin.random.Random
-
-class HakiView(context: Context) : View(context) {
-
-    var targets: () -> List<View> = { emptyList() }
-    var zoom: () -> Float = { 1f }
-
-    private class Bolt(
-        val segs: List<FloatArray>,
-        val born: Long,
-        val life: Long,
-        val sx: Float,
-        val sy: Float
-    )
-
-    private val bolts = ArrayList<Bolt>()
-    private val glow = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeCap = Paint.Cap.ROUND
-    }
-    private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
-    private val pulse = Paint()
-    private var nextAmbient = 0L
-    private var nextBtn = 0L
-    private val myLoc = IntArray(2)
-    private val loc = IntArray(2)
-    private val d = resources.displayMetrics.density
-    private val halfPi = (PI / 2).toFloat()
-
-    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
-        super.onSizeChanged(w, h, oldw, oldh)
-        pulse.shader = RadialGradient(
-            w / 2f, h * 0.38f, h * 0.5f,
-            intArrayOf(Color.argb(136, 255, 0, 0), Color.argb(0, 255, 0, 0)),
-            null, Shader.TileMode.CLAMP
-        )
-    }
-
-    override fun onDraw(canvas: Canvas) {
-        val now = SystemClock.uptimeMillis()
-        val w = width.toFloat()
-        val h = height.toFloat()
-
-        pulse.alpha = (255 * (0.55f + 0.35f * sin(now / 700f))).toInt().coerceIn(0, 255)
-        canvas.drawRect(0f, 0f, w, h, pulse)
-
-        drawEyes(canvas, w, h, now)
-
-        if (now >= nextAmbient) {
-            spawnAmbient(w, h, now)
-            nextAmbient = now + Random.nextLong(450L, 1300L)
-        }
-        if (now >= nextBtn) {
-            spawnButton(now)
-            nextBtn = now + Random.nextLong(160L, 480L)
-        }
-
-        val iter = bolts.iterator()
-        while (iter.hasNext()) {
-            val b = iter.next()
-            val age = now - b.born
-            if (age >= b.life) {
-                iter.remove()
-                continue
-            }
-            val t = age / b.life.toFloat()
-            var a = (1f - t) * (1f - t)
-            if (t > 0.2f && Random.nextFloat() < 0.2f) a *= 0.35f
-            drawBolt(canvas, b, a)
-        }
-        postInvalidateOnAnimation()
-    }
-
-    private fun drawEyes(c: Canvas, w: Float, h: Float, now: Long) {
-        val sc = max(w / 736f, h / 1311f)
-        val offX = (w - 736f * sc) / 2f
-        val offY = (h - 1311f * sc) / 2f
-        val z = zoom()
-        val flick = 0.65f + 0.35f * sin(now / 260f)
-        for (fx in floatArrayOf(376f, 409f)) {
-            var x = offX + fx * sc
-            var y = offY + 320f * sc
-            x = w / 2f + (x - w / 2f) * z
-            y = h / 2f + (y - h / 2f) * z
-            val r = 20f * d * z * (0.8f + 0.4f * flick)
-            fill.color = Color.argb((60 * flick).toInt(), 255, 30, 30)
-            c.drawCircle(x, y, r, fill)
-            fill.color = Color.argb((110 * flick).toInt(), 255, 60, 60)
-            c.drawCircle(x, y, r * 0.55f, fill)
-            fill.color = Color.argb((230 * flick).toInt(), 255, 210, 210)
-            c.drawCircle(x, y, r * 0.2f, fill)
-        }
-    }
-
-    private fun drawBolt(c: Canvas, b: Bolt, a: Float) {
-        glow.color = Color.argb((70 * a).toInt(), 255, 0, 0)
-        glow.strokeWidth = 11f * d
-        for (s in b.segs) c.drawLines(s, glow)
-        glow.color = Color.argb((150 * a).toInt(), 255, 40, 40)
-        glow.strokeWidth = 5f * d
-        for (s in b.segs) c.drawLines(s, glow)
-        glow.color = Color.argb((255 * a).toInt(), 255, 215, 215)
-        glow.strokeWidth = 1.6f * d
-        for (s in b.segs) c.drawLines(s, glow)
-        fill.color = Color.argb((220 * a).toInt(), 255, 120, 120)
-        c.drawCircle(b.sx, b.sy, 5f * d * (0.5f + a), fill)
-    }
-
-    private fun jag(x0: Float, y0: Float, angle: Float, len: Float, n: Int, jit: Float): FloatArray {
-        val pts = FloatArray((n + 1) * 2)
-        pts[0] = x0
-        pts[1] = y0
-        var x = x0
-        var y = y0
-        var a = angle
-        val step = len / n
-        for (i in 1..n) {
-            a += (Random.nextFloat() - 0.5f) * jit
-            x += cos(a) * step
-            y += sin(a) * step
-            pts[i * 2] = x
-            pts[i * 2 + 1] = y
-        }
-        return pts
-    }
-
-    private fun segsOf(p: FloatArray): FloatArray {
-        val n = p.size / 2 - 1
-        val s = FloatArray(n * 4)
-        for (i in 0 until n) {
-            s[i * 4] = p[i * 2]
-            s[i * 4 + 1] = p[i * 2 + 1]
-            s[i * 4 + 2] = p[i * 2 + 2]
-            s[i * 4 + 3] = p[i * 2 + 3]
-        }
-        return s
-    }
-
-    private fun spawnAmbient(w: Float, h: Float, now: Long) {
-        val left = Random.nextBoolean()
-        val x0 = if (left) w * (0.03f + Random.nextFloat() * 0.3f) else w * (0.67f + Random.nextFloat() * 0.3f)
-        val y0 = h * Random.nextFloat() * 0.45f
-        val ang = halfPi + (Random.nextFloat() - 0.5f) * 0.9f
-        val len = h * (0.15f + Random.nextFloat() * 0.25f)
-        val main = jag(x0, y0, ang, len, 12, 1.0f)
-        val segs = ArrayList<FloatArray>()
-        segs.add(segsOf(main))
-        repeat(Random.nextInt(1, 3)) {
-            val i = Random.nextInt(2, 10)
-            val sign = if (Random.nextBoolean()) 1f else -1f
-            val bAng = ang + sign * (0.5f + Random.nextFloat() * 0.6f)
-            segs.add(segsOf(jag(main[i * 2], main[i * 2 + 1], bAng, len * 0.35f, 6, 1.2f)))
-        }
-        bolts.add(Bolt(segs, now, Random.nextLong(220L, 520L), x0, y0))
-    }
-
-    private fun spawnButton(now: Long) {
-        val list = targets().filter { it.isShown && it.width > 0 }
-        if (list.isEmpty()) return
-        val v = list[Random.nextInt(list.size)]
-        getLocationOnScreen(myLoc)
-        v.getLocationOnScreen(loc)
-        val l = (loc[0] - myLoc[0]).toFloat()
-        val t = (loc[1] - myLoc[1]).toFloat()
-        val r = l + v.width
-        val bt = t + v.height
-        val inner = (v.width - 40f * d).coerceAtLeast(1f)
-        val side = Random.nextInt(4)
-        val x0: Float
-        val y0: Float
-        val base: Float
-        when (side) {
-            0 -> { x0 = l + 20f * d + inner * Random.nextFloat(); y0 = t; base = -halfPi }
-            1 -> { x0 = l + 20f * d + inner * Random.nextFloat(); y0 = bt; base = halfPi }
-            2 -> { x0 = l; y0 = t + v.height * Random.nextFloat(); base = PI.toFloat() }
-            else -> { x0 = r; y0 = t + v.height * Random.nextFloat(); base = 0f }
-        }
-        val ang = base + (Random.nextFloat() - 0.5f) * 1.2f
-        val len = d * (28f + Random.nextFloat() * 55f)
-        val main = jag(x0, y0, ang, len, 6, 1.4f)
-        val segs = ArrayList<FloatArray>()
-        segs.add(segsOf(main))
-        if (Random.nextFloat() < 0.5f) {
-            val i = Random.nextInt(2, 5)
-            val sign = if (Random.nextBoolean()) 1f else -1f
-            segs.add(segsOf(jag(main[i * 2], main[i * 2 + 1], ang + sign * 0.8f, len * 0.5f, 4, 1.3f)))
-        }
-        bolts.add(Bolt(segs, now, Random.nextLong(140L, 340L), x0, y0))
-    }
-}
 
 class MainActivity : AppCompatActivity() {
-
-    private val PKG = "com.bandainamcoent.opbrww"
-    private val D = "/sdcard/Android/data"
-    private val BACKUP = "/sdcard/EX25_Backup"
 
     private var useRoot = false
     @Volatile private var polling = false
 
     private lateinit var log: TextView
+    private lateinit var haki: HakiView
+    private lateinit var contentView: View
     private lateinit var modeGroup: LinearLayout
     private lateinit var menuGroup: LinearLayout
     private lateinit var stepsGroup: LinearLayout
@@ -282,6 +81,20 @@ class MainActivity : AppCompatActivity() {
             setStroke(dp(2), Color.parseColor(if (secondary) "#7A2B2B" else "#FF4D4D"))
         }
         elevation = dp(6).toFloat()
+        setOnTouchListener { v, e ->
+            if (e.action == MotionEvent.ACTION_DOWN && this@MainActivity::haki.isInitialized) {
+                haki.burst(v)
+                shake()
+            }
+            false
+        }
+    }
+
+    private fun shake() {
+        ObjectAnimator.ofFloat(contentView, View.TRANSLATION_X, 0f, 12f, -12f, 8f, -6f, 0f).apply {
+            duration = 240L
+            start()
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -319,8 +132,9 @@ class MainActivity : AppCompatActivity() {
 
         val credit = TextView(this).apply {
             text = "By Yami  •  TikTok @yami_sokehiro"
-            textSize = 12f
-            setTextColor(Color.parseColor("#FF8A8A"))
+            textSize = 13.5f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.parseColor("#FFB3B3"))
             setShadowLayer(8f, 0f, 2f, Color.BLACK)
             letterSpacing = 0.08f
             gravity = Gravity.CENTER
@@ -420,7 +234,7 @@ class MainActivity : AppCompatActivity() {
             addView(stepsGroup, fullWidth())
             addView(credit, fullWidth().apply { topMargin = dp(10) })
         }
-        val haki = HakiView(this).apply {
+        haki = HakiView(this).apply {
             targets = {
                 val out = ArrayList<View>()
                 for (g in listOf(modeGroup, menuGroup, stepsGroup)) {
@@ -430,6 +244,7 @@ class MainActivity : AppCompatActivity() {
             }
             zoom = { bg.scaleX }
         }
+        contentView = content
         val frame = FrameLayout(this).apply {
             setBackgroundColor(Color.BLACK)
             addView(bg, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
@@ -533,7 +348,8 @@ class MainActivity : AppCompatActivity() {
                 if (out.contains("STEP_OK")) {
                     val extra = out.substringAfter("STEP_OK").trim()
                     log.text = if (extra.isEmpty()) done else "$done\n$extra"
-                } else {                    log.text = "فشلت العملية:\n${out.ifBlank { "بدون تفاصيل" }}"
+                } else {
+                    log.text = "فشلت العملية:\n${out.ifBlank { "بدون تفاصيل" }}"
                 }
             }
         }
@@ -581,66 +397,5 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun step1() = """
-        [ -d "$D/$PKG" ] || { echo "مجلد اللعبة غير موجود"; exit 1; }
-        [ ! -e "$D/${PKG}_hold" ] || { echo "المجلد _hold موجود من قبل"; exit 1; }
-        am force-stop $PKG
-        mv "$D/$PKG" "$D/${PKG}_hold" || exit 1
-        echo STEP_OK
-    """.trimIndent()
-
-    private fun step2() = """
-        pm clear $PKG || { echo "فشل مسح البيانات"; exit 1; }
-        echo STEP_OK
-    """.trimIndent()
-
-    private fun step3() = """
-        [ -e "$D/${PKG}_hold" ] || { echo "ما في مجلد _hold"; exit 1; }
-        rm -rf "$D/$PKG"
-        mv "$D/${PKG}_hold" "$D/$PKG" || exit 1
-        echo STEP_OK
-    """.trimIndent()
-
-    private fun backupCmd() = """
-        [ -d "$D/$PKG" ] || { echo "مجلد اللعبة غير موجود"; exit 1; }
-        rm -rf "$BACKUP.tmp"
-        mkdir -p "$BACKUP.tmp" || exit 1
-        cp -a "$D/$PKG/." "$BACKUP.tmp/" || { echo "فشل النسخ (ممكن المساحة ما تكفي)"; exit 1; }
-        rm -rf "$BACKUP"
-        mv "$BACKUP.tmp" "$BACKUP" || exit 1
-        echo STEP_OK
-        du -sh "$BACKUP" | cut -f1
-    """.trimIndent()
-
-    private fun restoreCmd() = """
-        [ -d "$BACKUP" ] || { echo "ما في نسخة احتياطية"; exit 1; }
-        rm -rf "$D/${PKG}_restore"
-        cp -a "$BACKUP" "$D/${PKG}_restore" || { echo "فشل النسخ (ممكن المساحة ما تكفي)"; rm -rf "$D/${PKG}_restore"; exit 1; }
-        am force-stop $PKG
-        rm -rf "$D/$PKG"
-        mv "$D/${PKG}_restore" "$D/$PKG" || exit 1
-        echo STEP_OK
-    """.trimIndent()
-
     private fun exec(cmd: String): String = if (useRoot) execRoot(cmd) else execShizuku(cmd)
-
-    private fun execShizuku(cmd: String): String = try {
-        val m = Shizuku::class.java.getDeclaredMethod(
-            "newProcess",
-            Array<String>::class.java, Array<String>::class.java, String::class.java
-        ).apply { isAccessible = true }
-        read(m.invoke(null, arrayOf("sh", "-c", cmd), null, null) as Process)
-    } catch (t: Throwable) { "خطأ: ${t.message}" }
-
-    private fun execRoot(cmd: String): String = try {
-        read(Runtime.getRuntime().exec(arrayOf("su", "-c", cmd)))
-    } catch (t: Throwable) { "ما لقيت root: ${t.message}" }
-
-    private fun read(p: Process): String {
-        val o = p.inputStream.bufferedReader().readText()
-        val e = p.errorStream.bufferedReader().readText()
-        p.waitFor()
-        return o + e
-    }
 }
-  
